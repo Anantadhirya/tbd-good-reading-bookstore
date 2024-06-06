@@ -143,3 +143,33 @@ export const addPurchase = async (req, res) => {
     if (client) client.release();
   }
 };
+
+export const updateInventory = async (req, res) => {
+  const { store_number, book_number, quantity } = req.body;
+
+  if (!store_number || !book_number || !quantity)
+    return res
+      .status(400)
+      .send("Book number, store number, and quantity cannot be empty");
+
+  try {
+    const result = await db.query(
+      `UPDATE "Inventory" SET quantity = $1 WHERE store_number = $2 AND book_number = $3 RETURNING *`,
+      [quantity, store_number, book_number]
+    );
+    if (result.rowCount === 0) {
+      await db.query(
+        `INSERT INTO "Inventory" (store_number, book_number, quantity) VALUES ($1, $2, $3)`,
+        [store_number, book_number, quantity]
+      );
+    }
+    res.status(200).send("Inventory updated successfully");
+  } catch (error) {
+    if (error.code === "23503") {
+      res.status(400).send("Invalid store number or book number");
+    } else {
+      console.error("Error updating inventory: ", error);
+      res.status(500).send("Internal Server Error");
+    }
+  }
+};
