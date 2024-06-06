@@ -4,6 +4,8 @@ import bookRouter from "./routes/book.js";
 
 const app = express();
 
+app.use(express.json());
+
 app.use("/books", bookRouter);
 
 const port = process.env.PORT || 3000;
