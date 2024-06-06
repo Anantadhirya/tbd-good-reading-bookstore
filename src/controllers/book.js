@@ -10,6 +10,24 @@ export const getAllBooks = async (req, res, next) => {
   }
 };
 
+export const searchBooksByName = async (req, res, next) => {
+  try {
+    const book_name = req.query.q;
+    const result = await db.query(
+      `SELECT * FROM "Book" WHERE book_name LIKE $1`,
+      [`%${book_name}%`]
+    );
+    if (result.rowCount === 0) {
+      res.status(404);
+      throw new Error("Book not found");
+    } else {
+      res.status(200).send(result.rows);
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const addBook = async (req, res, next) => {
   var client;
   try {
