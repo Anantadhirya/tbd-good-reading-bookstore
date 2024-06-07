@@ -1,4 +1,4 @@
-import db from "../db/index.js";
+import { SQLBuilder } from "../helper/SQLBuilder.js";
 
 export const addWishlist = async (req, res, next) => {
   try {
@@ -7,10 +7,10 @@ export const addWishlist = async (req, res, next) => {
       res.status(400);
       throw new Error("User ID and Book Number cannot be empty");
     }
-    await db.query(
-      `INSERT INTO "Wishlist" (user_id, book_number) VALUES ($1, $2)`,
-      [user_id, book_number]
-    );
+    await new SQLBuilder()
+      .insert(`"Wishlist"`)
+      .values({ user_id, book_number })
+      .query();
     res.status(201).send("Wishlist item added successfully");
   } catch (err) {
     next(err);
@@ -24,10 +24,11 @@ export const removeWishlist = async (req, res, next) => {
       res.status(400);
       throw new Error("User ID and Book Number cannot be empty");
     }
-    const result = await db.query(
-      `DELETE FROM "Wishlist" WHERE user_id = $1 AND book_number = $2 RETURNING *`,
-      [user_id, book_number]
-    );
+    const result = await new SQLBuilder()
+      .delete(`"Wishlist"`)
+      .where(`user_id = $1 AND book_number = $2`, [user_id, book_number])
+      .returning(`*`)
+      .query();
     if (result.rowCount === 0) {
       res.status(404);
       throw new Error("Wishlist item not found");

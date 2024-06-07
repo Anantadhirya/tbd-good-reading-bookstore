@@ -1,9 +1,9 @@
 import db from "../db/index.js";
+import { SQLBuilder } from "../helper/SQLBuilder.js";
 
 export const getAllBooks = async (req, res, next) => {
   try {
-    const query = `SELECT * FROM "Book"`;
-    const result = await db.query(query);
+    const result = await new SQLBuilder().select(`*`).from(`"Book"`).query();
     res.send(result.rows);
   } catch (err) {
     next(err);
@@ -13,10 +13,11 @@ export const getAllBooks = async (req, res, next) => {
 export const searchBooksByName = async (req, res, next) => {
   try {
     const book_name = req.query.q;
-    const result = await db.query(
-      `SELECT * FROM "Book" WHERE book_name LIKE $1`,
-      [`%${book_name}%`]
-    );
+    const result = await new SQLBuilder()
+      .select(`*`)
+      .from(`"Book"`)
+      .where(`book_name LIKE $1`, [`%${book_name}%`])
+      .query();
     if (result.rowCount === 0) {
       res.status(404);
       throw new Error("Book not found");
@@ -162,15 +163,20 @@ export const updateInventory = async (req, res, next) => {
       );
     }
 
-    const result = await db.query(
-      `UPDATE "Inventory" SET quantity = $1 WHERE store_number = $2 AND book_number = $3 RETURNING *`,
-      [quantity, store_number, book_number]
-    );
+    const result = await new SQLBuilder()
+      .update(`"Inventory"`)
+      .set(`quantity = $1`, [quantity])
+      .where(`store_number = $2 AND book_number = $3`, [
+        store_number,
+        book_number,
+      ])
+      .returning(`*`)
+      .query();
     if (result.rowCount === 0) {
-      await db.query(
-        `INSERT INTO "Inventory" (store_number, book_number, quantity) VALUES ($1, $2, $3)`,
-        [store_number, book_number, quantity]
-      );
+      await new SQLBuilder()
+        .insert(`"Inventory"`)
+        .values({ store_number, book_number, quantity })
+        .query();
     }
     res.status(200).send("Inventory updated successfully");
   } catch (err) {
