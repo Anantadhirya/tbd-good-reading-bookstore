@@ -55,10 +55,29 @@ export class SQLBuilder {
 
   build() {
     // Returns the object { query, params }
-    return { query: this.queryString, params: this.params };
+    return { queryString: this.queryString, params: this.params };
   }
   query() {
     // Returns the result of the query
     return db.query(this.queryString, this.params);
+  }
+
+  async transaction(func) {
+    var client;
+    try {
+      client = await db.connect();
+      await client.query(`BEGIN`);
+      const queryFunc = (query) => {
+        const { queryString, params } = query;
+        return client.query(queryString, params);
+      };
+      await func(queryFunc);
+      await client.query(`COMMIT`);
+    } catch (err) {
+      if (client) await client.query(`ROLLBACK`);
+      throw err;
+    } finally {
+      if (client) client.release();
+    }
   }
 }
