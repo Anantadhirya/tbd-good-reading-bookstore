@@ -30,61 +30,61 @@ export const searchBooksByName = async (req, res, next) => {
 };
 
 export const addBook = async (req, res, next) => {
-  var client;
   try {
-    const {
-      book_name,
-      publisher_number = null,
-      publication_year = null,
-      pages = null,
-      price = null,
-      author_numbers = [], // many-to-many relationship
-      category_ids = [], // multivalue attribute
-    } = req.body;
+    await new SQLBuilder().transaction(async (query) => {
+      const {
+        book_name,
+        publisher_number = null,
+        publication_year = null,
+        pages = null,
+        price = null,
+        author_numbers = [], // many-to-many relationship
+        category_ids = [], // multivalue attribute
+      } = req.body;
 
-    if (!book_name) {
-      res.status(400);
-      throw new Error("Book name cannot be empty");
-    }
+      if (!book_name) {
+        res.status(400);
+        throw new Error("Book name cannot be empty");
+      }
 
-    client = await db.connect();
-
-    await client.query(`BEGIN`);
-
-    const result = await client.query(
-      `INSERT INTO "Book" (book_name, publisher_number, publication_year, pages, price) VALUES ($1, $2, $3, $4, $5) RETURNING book_number`,
-      [book_name, publisher_number, publication_year, pages, price]
-    );
-    const book_number = result.rows[0].book_number;
-
-    for (const author_number of author_numbers) {
-      await client.query(
-        `INSERT INTO "Wrote" (author_number, book_number) VALUES ($1, $2)`,
-        [author_number, book_number]
+      const result = await query(
+        new SQLBuilder()
+          .insert(`"Book"`)
+          .values({
+            book_name,
+            publisher_number,
+            publication_year,
+            pages,
+            price,
+          })
+          .returning(`book_number`)
       );
-    }
+      const book_number = result.rows[0].book_number;
 
-    for (const category_id of category_ids) {
-      await client.query(
-        `INSERT INTO "Book_Category" (book_number, category_id) VALUES ($1, $2)`,
-        [book_number, category_id]
-      );
-    }
+      for (const author_number of author_numbers) {
+        await query(
+          new SQLBuilder()
+            .insert(`"Wrote"`)
+            .values({ author_number, book_number })
+        );
+      }
 
-    await client.query(`COMMIT`);
+      for (const category_id of category_ids) {
+        await query(
+          new SQLBuilder()
+            .insert(`"Book_Category"`)
+            .values({ book_number, category_id })
+        );
+      }
 
-    res.status(201).json({ book_number });
+      res.status(201).json({ book_number });
+    });
   } catch (err) {
-    if (client) await client.query(`ROLLBACK`);
     next(err);
-  } finally {
-    if (client) client.release();
   }
 };
 
 export const addPurchase = async (req, res, next) => {
-  var client;
-
   try {
     const {
       customer_number,
@@ -101,54 +101,55 @@ export const addPurchase = async (req, res, next) => {
       res.status(400);
       throw new Error("Books cannot be empty");
     }
-    for (const book of books) {
-      const { book_number, quantity } = book;
-    }
 
-    client = await db.connect();
+    await new SQLBuilder().transaction(async (query) => {
+      for (const book of books) {
+        const { book_number, quantity } = book;
 
-    await client.query(`BEGIN`);
+        if (!book_number || !quantity) {
+          res.status(400);
+          throw new Error("Book number and quantity cannot be empty");
+        }
 
-    for (const book of books) {
-      const { book_number, quantity } = book;
-
-      if (!book_number || !quantity) {
-        res.status(400);
-        throw new Error("Book number and quantity cannot be empty");
-      }
-
-      await client.query(
-        `INSERT INTO "Bought" (customer_number, book_number, store_number, date, quantity) VALUES ($1, $2, $3, $4, $5)`,
-        [customer_number, book_number, store_number, date, quantity]
-      );
-
-      const result = await client.query(
-        `UPDATE "Inventory" SET quantity = quantity - $1 WHERE store_number = $2 AND book_number = $3 RETURNING quantity`,
-        [quantity, store_number, book_number]
-      );
-      if (result.rowCount === 0) {
-        res.status(400);
-        throw new Error(
-          `Book ${book_number} at store ${store_number} not found`
+        await query(
+          new SQLBuilder().insert(`"Bought"`).values({
+            customer_number,
+            book_number,
+            store_number,
+            date,
+            quantity,
+          })
         );
-      }
-      const resultQuantity = result.rows[0].quantity;
-      if (resultQuantity < 0) {
-        res.status(400);
-        throw new Error(
-          `Book ${book_number} quantity at store ${store_number} is not enough`
+
+        const result = await query(
+          new SQLBuilder()
+            .update(`"Inventory"`)
+            .set("quantity = quantity - $1", [quantity])
+            .where("store_number = $2 AND book_number = $3", [
+              store_number,
+              book_number,
+            ])
+            .returning("quantity")
         );
+        if (result.rowCount === 0) {
+          res.status(400);
+          throw new Error(
+            `Book ${book_number} at store ${store_number} not found`
+          );
+        }
+        const resultQuantity = result.rows[0].quantity;
+        if (resultQuantity < 0) {
+          res.status(400);
+          throw new Error(
+            `Book ${book_number} quantity at store ${store_number} is not enough`
+          );
+        }
       }
-    }
 
-    await client.query(`COMMIT`);
-
-    res.status(201).send("Purchase added successfully");
+      res.status(201).send("Purchase added successfully");
+    });
   } catch (err) {
-    if (client) await client.query(`ROLLBACK`);
     next(err);
-  } finally {
-    if (client) client.release();
   }
 };
 
