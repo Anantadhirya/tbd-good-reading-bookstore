@@ -1,4 +1,3 @@
-import db from "../db/index.js";
 import { SQLBuilder } from "../helper/SQLBuilder.js";
 
 export const getAllBooks = async (req, res, next) => {
