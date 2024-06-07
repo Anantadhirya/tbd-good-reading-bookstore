@@ -63,12 +63,13 @@ export class SQLBuilder {
   }
 
   async transaction(func) {
+    // Inside the transaction function, querying is done by using `query(new SQLBuilder())` instead of `new SQLBuilder().query()`
     var client;
     try {
       client = await db.connect();
       await client.query(`BEGIN`);
-      const queryFunc = (query) => {
-        const { queryString, params } = query;
+      const queryFunc = (SQLBuilderQuery) => {
+        const { queryString, params } = SQLBuilderQuery;
         return client.query(queryString, params);
       };
       await func(queryFunc);
